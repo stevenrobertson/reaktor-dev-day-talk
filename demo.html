@@ -1,0 +1,40 @@
+<html>
+<head>
+  <title>title</title>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/three.js/r68/three.min.js"></script>
+  <style>
+    canvas { width: 100%; height: 100%; }
+    body { padding: 0; margin: 0; }
+  </style>
+</head>
+<body>
+  <video src="destiny_248.webm" autoplay loop id="v" style="display:none;"></video>
+  <script id="vertexShader" type="x-shader/x-vertex">
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+  </script>
+  <script id="fragmentShader" type="x-shader/x-fragment">
+uniform sampler2D baseTexture;
+uniform sampler2D lastTexture;
+
+varying vec2 vUv;
+void main() {
+  vec4 color = texture2D(baseTexture, vUv);
+  vec4 lastColor = texture2D(lastTexture, vUv);
+  if (vUv.x < 0.1 || vUv.x > 0.9) {
+    color = lastColor;
+  } else if (vUv.x > 0.2 && vUv.x < 0.8) {
+    color.x = abs(color.x - lastColor.x);
+    color.y = abs(color.y - lastColor.y);
+    color.z = abs(color.z - lastColor.z);
+  }
+  gl_FragColor = color;
+}
+</script>
+
+  <script src="demo.js"></script>
+</body>
+</html>
