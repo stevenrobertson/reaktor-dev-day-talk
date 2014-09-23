@@ -5,36 +5,329 @@
   <style>
     canvas { width: 100%; height: 100%; }
     body { padding: 0; margin: 0; }
+    div.status {position: absolute; font-size: larger; z-index: 100; color: white;
+    font-family: sans-serif;}
   </style>
 </head>
 <body>
-  <video src="destiny_248.webm" autoplay loop id="v" style="display:none;"></video>
+  <div class="status" id="status"></div>
+  <video src="destiny_247.webm" autoplay loop id="v" style="display:none;"></video>
+  <script>
+navigator.webkitGetUserMedia({video:true,audio:true},function(lms) {
+  document.getElementById('v').src = URL.createObjectURL(lms);
+}, function() {});
+</script>
   <script id="vertexShader" type="x-shader/x-vertex">
-varying vec2 vUv;
+varying highp vec2 vUv;
 void main() {
   vUv = uv;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
   </script>
-  <script id="fragmentShader" type="x-shader/x-fragment">
+  <script id="scalingVertex" type="x-shader/x-vertex">
+varying highp vec2 vUv;
+void main() {
+  vUv = vec2(2.0 * 1280.0 * uv.x, 2.0 * 720.0 * uv.y);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+  </script>
+  <script id="passThru" type="x-shader/x-fragment">
+uniform sampler2D baseTexture;
+varying highp vec2 vUv;
+void main() {
+  gl_FragColor = texture2D(baseTexture, vUv);
+}
+  </script>
+  <script id="deltaShader" type="x-shader/x-fragment">
 uniform sampler2D baseTexture;
 uniform sampler2D lastTexture;
+uniform float lowBound;
+uniform float highBound;
 
-varying vec2 vUv;
+varying highp vec2 vUv;
 void main() {
   vec4 color = texture2D(baseTexture, vUv);
   vec4 lastColor = texture2D(lastTexture, vUv);
-  if (vUv.x < 0.1 || vUv.x > 0.9) {
+  bool isUL = vUv.y > 0.1 && vUv.y < 0.11;
+  if (vUv.x < lowBound || vUv.x > highBound) {
     color = lastColor;
-  } else if (vUv.x > 0.2 && vUv.x < 0.8) {
+    if (isUL) {color = vec4(0.5, 0.8, 0.5, 1.0);}
+  } else if (vUv.x > lowBound * 2.0 && vUv.x < 1.0 - (1.0 - highBound) * 2.0) {
     color.x = abs(color.x - lastColor.x);
     color.y = abs(color.y - lastColor.y);
     color.z = abs(color.z - lastColor.z);
+    if (isUL) {color = vec4(0.8, 0.5, 0.5, 1.0);}
+  } else if (isUL) {color = vec4(0.5, 0.5, 0.8, 1.0);}
+  gl_FragColor = color;
+}
+</script>
+  <script id="mocompShader" type="x-shader/x-fragment">
+uniform sampler2D baseTexture;
+uniform sampler2D lastTexture;
+uniform int visMode;
+
+#define searchRad 3.0
+
+varying highp vec2 vUv;
+void main() {
+  vec4 color = texture2D(baseTexture, vUv);
+  vec4 bestDiff = color;
+  float bestRsq = 10000000.0;
+  if (vUv.x < 0.05 || vUv.x > 0.95) {
+    color = texture2D(lastTexture, vUv);
+  } else if (vUv.x > 0.1 && vUv.x < 0.9) {
+    float besti = 0.0, bestj = 0.0;
+    vec4 lastColor = texture2D(lastTexture, vUv);
+    if (lastColor.x == color.x && lastColor.y == color.y && lastColor.z == color.z) {
+      bestRsq = 0.0;
+      bestDiff = vec4(0.0);
+    } else {
+      for (float i = -searchRad; i <= searchRad; i++) {
+        for (float j = -searchRad; j <= searchRad; j++) {
+          vec2 altUv;
+          altUv.x = vUv.x + i * (1.0 / 1280.0);
+          altUv.y = vUv.y + j * (1.0 / 720.0);
+          vec4 lastColor = texture2D(lastTexture, altUv);
+          float xd = color.x - lastColor.x;
+          float yd = color.y - lastColor.y;
+          float zd = color.z - lastColor.z;
+          float sumsq = xd * xd + yd * yd + zd * zd;
+          if (sumsq < bestRsq) {
+            bestDiff.x = abs(xd);
+            bestDiff.y = abs(yd);
+            bestDiff.z = abs(zd);
+            bestRsq = sumsq;
+            besti = i;
+            bestj = j;
+          }
+        }
+      }
+    }
+    if (visMode == 0) {
+      color = bestDiff;
+    } else if (visMode == 1) {
+      if (bestRsq == 0.0) {
+        color = vec4(0.0);
+      } else {
+        color.x = 0.3 + besti / searchRad / 2.0;
+        color.z = 0.3 + bestj / searchRad / 2.0;
+        color.y = 0.3 + bestRsq;
+      }
+    } else if (visMode == 2) {
+      if (bestRsq < 0.00005) {
+        color = vec4(0.0);
+      } else {
+        if (besti > 0.0) {
+          color.x = besti / searchRad / 2.0;
+          color.z = 0.0;
+        } else {
+          color.z = -besti / searchRad / 2.0;
+          color.x = 0.0;
+        }
+        color.y = bestRsq;
+      }
+    }
   }
   gl_FragColor = color;
 }
 </script>
 
-  <script src="demo.js"></script>
+<script id="quantize" type="x-shader/x-fragment">
+uniform sampler2D baseTexture;
+uniform float qLevel;
+
+varying highp vec2 vUv;
+
+void main() {
+  vec4 color = texture2D(baseTexture, vUv);
+  color.x = floor((color.x * qLevel) + 0.5) / qLevel;
+  color.y = floor((color.y * qLevel) + 0.5) / qLevel;
+  color.z = floor((color.z * qLevel) + 0.5) / qLevel;
+  gl_FragColor = color;
+}
+</script>
+<script id="splitscreen" type="x-shader/x-fragment">
+uniform sampler2D baseTexture;
+uniform sampler2D lastTexture;
+uniform float qLevel;
+uniform float pos;
+
+varying highp vec2 vUv;
+void main() {
+  if (vUv.x < pos && vUv.x + 1.0 / 1280.0 > pos) {
+    gl_FragColor = vec4(1.0);
+  } else if (vUv.x < pos) {
+    gl_FragColor = texture2D(baseTexture, vUv);
+  } else {
+    vec4 color = texture2D(lastTexture, vUv);
+    color.x = floor((color.x * qLevel) + 0.5) / qLevel;
+    color.y = floor((color.y * qLevel) + 0.5) / qLevel;
+    color.z = floor((color.z * qLevel) + 0.5) / qLevel;
+    gl_FragColor = color;
+  }
+}
+</script>
+
+<script id="loadCheckerboard" type="x-shader/x-fragment">
+varying highp vec2 vUv;
+void main() {
+  //if ((floor(vUv.x * 640.0) == floor(vUv.x * 640.0 + 0.49)) ==
+  //(floor(vUv.y * 360.0) == floor(vUv.y * 360.0 + 0.49))) {
+  if (floor(vUv.x * 320.0) == floor(vUv.x * 320.0 + 0.49)) {
+    gl_FragColor.x = 0.9;
+    gl_FragColor.y = 0.9;
+    gl_FragColor.z = 0.9;
+  } else {
+    gl_FragColor.x = 0.1;
+    gl_FragColor.y = 0.1;
+    gl_FragColor.z = 0.1;
+  }
+  /*
+  if ((floor(vUv.x * 320.0) == floor(vUv.x * 320.0 + 0.49)) ==
+      (floor(vUv.y * 180.0) == floor(vUv.y * 180.0 + 0.49))) {
+    gl_FragColor.y = 0.9;
+  } else {
+    gl_FragColor.y = 0.1;
+  }*/
+  //gl_FragColor.y = vUv.x;
+  //gl_FragColor.z = vUv.y;
+}
+</script>
+
+<script id="waveletAnalysis" type="x-shader/x-fragment">
+uniform sampler2D baseTexture;
+uniform bool vertMode;
+uniform float invLevel;
+uniform float qLevel;
+uniform float randSeed;
+uniform bool isHorizOnly;
+
+varying highp vec2 vUv;
+
+highp float rand(vec2 co)
+{
+    highp float a = 12.9898;
+    highp float b = 78.233;
+    highp float c = 43758.5453;
+    highp float dt= dot(co.xy ,vec2(a,b));
+    highp float sn= mod(dt,3.14);
+    return fract(sin(sn) * c);
+}
+
+void main() {
+  float coord = 2.0 * (vertMode ? vUv.y : vUv.x);
+  bool isDelta = coord >= invLevel;
+  if (vUv.x >= invLevel || (!isHorizOnly && vUv.y >= invLevel)) {
+    gl_FragColor = texture2D(baseTexture, vUv);
+    return;
+  }
+
+  highp vec2 addr = vec2(vUv.x, vUv.y);
+  if (vertMode) {
+    addr.y = vUv.y * 2.0 - (isDelta ? invLevel : 0.0);
+  } else {
+    addr.x = vUv.x * 2.0 - (isDelta ? invLevel : 0.0);
+  }
+
+  vec4 first = texture2D(baseTexture, addr);
+  if (vertMode) {
+    addr.y += 1.0 / 720.0;
+  } else {
+    addr.x += 1.0 / 1280.0;
+  }
+  vec4 second = texture2D(baseTexture, addr);
+  if (second.x == first.x && second.y == first.y && second.z == first.z) {
+    addr.x += 0.5 / 1280.0;
+    second = texture2D(baseTexture, addr);
+  }
+
+  if (!isDelta) {
+    gl_FragColor.x = (first.x + second.x) / 2.0;
+    gl_FragColor.y = (first.y + second.y) / 2.0;
+    gl_FragColor.z = (first.z + second.z) / 2.0;
+  } else {
+    vec2 co = addr;
+    co.x = fract(co.x + randSeed);
+    float randVal = rand(co);
+    gl_FragColor.x = floor((first.x - second.x) * qLevel / 2.0 + randVal) / qLevel + 0.5;
+    gl_FragColor.y = floor((first.y - second.y) * qLevel / 2.0 + randVal) / qLevel + 0.5;
+    gl_FragColor.z = floor((first.z - second.z) * qLevel / 2.0 + randVal) / qLevel + 0.5;
+  }
+
+}
+
+</script>
+<script id="waveletEmphasis" type="x-shader/x-fragment">
+uniform sampler2D baseTexture;
+uniform float invLevel;
+uniform bool isHorizOnly;
+
+varying highp vec2 vUv;
+void main() {
+  vec4 color = texture2D(baseTexture, vUv);
+
+  if (vUv.x >= invLevel || (!isHorizOnly && vUv.y >= invLevel)) {
+    color.x = abs(color.x - 0.5) * 16.0 ;
+    color.y = abs(color.y - 0.5) * 16.0 ;
+    color.z = abs(color.z - 0.5) * 16.0 ;
+  }
+  gl_FragColor = color;
+}
+</script>
+<script id="waveletSynthesis" type="x-shader/x-fragment">
+uniform sampler2D baseTexture;
+uniform bool vertMode;
+uniform float invLevel;
+uniform bool isHorizOnly;
+
+varying highp vec2 vUv;
+void main() {
+  if (vUv.x >= invLevel || (!isHorizOnly && vUv.y >= invLevel)) {
+    gl_FragColor = texture2D(baseTexture, vUv);
+    return;
+  }
+
+  float base = vertMode ? 720.0 : 1280.0;
+  vec2 addr = vUv;
+  if (vertMode) {
+    addr.y = vUv.y / 2.0;
+  } else {
+    addr.x = vUv.x / 2.0;
+  }
+  bool isDelta = vertMode ?
+    floor(vUv.y * 360.0) == floor(vUv.y * 360.0 + 0.49) :
+    floor(vUv.x * 640.0) == floor(vUv.x * 640.0 + 0.49);
+  if (isDelta) {
+    if (vertMode) {
+      addr.y -= 0.5 / 720.0;
+    } else {
+      addr.x -= 0.5 / 1280.0;
+    }
+  }
+
+  vec4 first = texture2D(baseTexture, addr);
+  if (vertMode) {
+    addr.y += invLevel / 2.0;
+  } else {
+    addr.x += invLevel / 2.0;
+  }
+  vec4 second = texture2D(baseTexture, addr);
+  second.x -= 0.5;
+  second.y -= 0.5;
+  second.z -= 0.5;
+
+  if (isDelta) {
+    gl_FragColor.x = first.x - second.x;
+    gl_FragColor.y = first.y - second.y;
+    gl_FragColor.z = first.z - second.z;
+  } else {
+    gl_FragColor.x = first.x + second.x;
+    gl_FragColor.y = first.y + second.y;
+    gl_FragColor.z = first.z + second.z;
+  }
+  gl_FragColor.w = first.w;
+}
+</script>
+<script src="demo.js"></script>
 </body>
 </html>
