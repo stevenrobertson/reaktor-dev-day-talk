@@ -31,6 +31,41 @@ void main() {
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
   </script>
+  <script id="squiggo" type="x-shader/x-fragment">
+// i'm such a bad person for implementing this as a fragment shader
+varying highp vec2 vUv;
+uniform float time;
+uniform float rate;
+uniform bool showValue;
+void main() {
+  float x = vUv.x - 0.5;
+  float y = vUv.y - 0.5;
+  float baseValue = 0.3 - x*x/3.0 - y*y/3.0;
+  float value = baseValue;
+
+  if (vUv.x < time / 3.0) {
+    float val = sin(vUv.x * rate * 3.14);
+    float pos = 0.75 + val / 6.0;
+    if (pos > vUv.y && pos < vUv.y + 0.01) {
+      // sine wave
+      value = 1.0;
+    } else if (showValue) {
+      if (vUv.y > 0.051 && vUv.y < 0.449) {
+        value = 0.5 + val / 2.0;
+      } else if (vUv.y > 0.05 && vUv.y < 0.45) {
+        // borders
+        value = 1.0;
+      }
+    }
+
+    if (time > 3.0) {
+      float alpha = 4.0 - time;
+      value = alpha * value + (1.0 - alpha) * baseValue;
+    }
+  }
+  gl_FragColor = vec4(value);
+}
+  </script>
   <script id="passThru" type="x-shader/x-fragment">
 uniform sampler2D baseTexture;
 varying highp vec2 vUv;

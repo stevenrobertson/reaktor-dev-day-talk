@@ -124,6 +124,31 @@ PixelDiffingGraph.prototype.getStatusText = function() {
     return 'diff';
 };
 
+var SquiggoGraph = function() {
+  this.sq = createScene('squiggo');
+  this.sq.u.time = {type: "f", value: 0};
+  this.sq.u.rate = {type: "f", value: 4.0};
+  this.sq.u.showValue = {type: "i", value: 0};
+};
+
+SquiggoGraph.prototype.render = function() {
+  this.sq.u.time.value = (this.sq.u.time.value + 1/60) % 4;
+  renderer.render(this.sq.scene, camera);
+};
+
+SquiggoGraph.prototype.handleKeypress = function(key) {
+  if (key == 'r') {
+    this.sq.u.rate.value = this.sq.u.rate.value == 4.0 ? 12.0 : 4.0;
+  } else if (key == 's') {
+    this.sq.u.showValue.value = !this.sq.u.showValue.value;
+  }
+};
+
+SquiggoGraph.prototype.getStatusText = function() {
+    return 'squiggo, rate[r]=' + this.sq.u.rate.value +
+      ', show[s]=' + this.sq.u.showValue.value;
+};
+
 var MotionCompensationGraph = function() {
   this.mc = createScene('mocompShader');
   this.mc.u.visMode = {type: "i", value: 0};
@@ -291,7 +316,7 @@ WaveletGraph.prototype.getStatusText = function() {
     ', enhance[e]=' + this.enhance + ', sspos[s]=' + this.splitScreenPos;
 };
 
-var graph = new WaveletGraph();
+var graph = new SquiggoGraph();
 
 function render() {
   requestAnimationFrame(render);
@@ -326,6 +351,9 @@ document.addEventListener('keypress', function(evt) {
   } else if (key == '3') {
     graph = new MotionCompensationGraph();
     play();
+  } else if (key == '0') {
+    graph = new SquiggoGraph();
+    video.pause();
   } else if (key == 'd') {
     play();
   } else if (key == ',') {
