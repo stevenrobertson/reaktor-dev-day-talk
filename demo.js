@@ -30,8 +30,8 @@ var createCanvasAndTexture = function() {
   return {canvas: canvas, ctx: context, tex: tex};
 };
 
-var createRT = function() {
-  var rtTex = new THREE.WebGLRenderTarget(ctx.vw * 2, ctx.vh * 2, {
+var createRT = function(factor) {
+  var rtTex = new THREE.WebGLRenderTarget(ctx.vw * factor, ctx.vh * factor, {
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter});
   return rtTex;
@@ -149,6 +149,26 @@ SquiggoGraph.prototype.getStatusText = function() {
       ', show[s]=' + this.sq.u.showValue.value;
 };
 
+var CrappyLaplacianGraph = function() {
+  this.lp = createScene('laplacian');
+  this.lp.u.srcTex = {type: 't', value: videoCanvas.tex};
+  this.lp.u.isVertMode = {type: 'i', value: 0};
+
+  this.bl = createScene('blendo');
+  this.rtLoTex = createRT(1);
+  this.rtMedTex = createRT(1);
+  this.rtHighTex = createRT(1);
+
+  this.bl.u.loTex = {type: "t", value: this.rtLoTex};
+  this.bl.u.medTex = {type: "t", value: this.rtMedTex};
+  this.bl.u.highTex = {type: "t", value: this.rtHighTex};
+};
+
+CrappyLaplacianGraph.prototype.render = function() {
+  this.lp.u.srcTex.value = videoCanvas.tex;
+  renderer.render(this.lp.scene, camera, this.bl.u.j);
+};
+
 var MotionCompensationGraph = function() {
   this.mc = createScene('mocompShader');
   this.mc.u.visMode = {type: "i", value: 0};
@@ -198,8 +218,8 @@ var WaveletGraph = function() {
   this.we.u.isHorizOnly = {type: "i", value: 1};
   this.ws = createScene('waveletSynthesis');
   this.ws.u.isHorizOnly = {type: "i", value: 1};
-  this.rtFrontTex = createRT();
-  this.rtBackTex = createRT();
+  this.rtFrontTex = createRT(2);
+  this.rtBackTex = createRT(2);
 
   this.numLevels = 0;
   this.qLevels = [];
@@ -354,6 +374,9 @@ document.addEventListener('keypress', function(evt) {
   } else if (key == '0') {
     graph = new SquiggoGraph();
     video.pause();
+  } else if (key == '9') {
+    graph = new CrappyLaplacianGraph();
+    play();
   } else if (key == 'd') {
     play();
   } else if (key == ',') {
