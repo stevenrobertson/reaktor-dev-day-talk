@@ -1,46 +1,23 @@
 <!doctype html>
 <html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Deploying VP9 at YouTube - a postmortem</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-	<head>
-		<meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-		<title>reveal.js - The HTML Presentation Framework</title>
-
-		<meta name="description" content="A framework for easily creating beautiful presentations using HTML">
-		<meta name="author" content="Hakim El Hattab">
-
-		<meta name="apple-mobile-web-app-capable" content="yes" />
-		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-
-		<link rel="stylesheet" href="reveal.js/css/reveal.min.css">
-		<link rel="stylesheet" href="reveal.js/css/theme/default.css" id="theme">
-
-		<!-- For syntax highlighting -->
-		<link rel="stylesheet" href="reveal.js/lib/css/zenburn.css">
-
-		<!-- If the query includes 'print-pdf', include the PDF print sheet -->
-		<script>
-			if( window.location.search.match( /print-pdf/gi ) ) {
-				var link = document.createElement( 'link' );
-				link.rel = 'stylesheet';
-				link.type = 'text/css';
-				link.href = 'reveal.js/css/print/pdf.css';
-				document.getElementsByTagName( 'head' )[0].appendChild( link );
-			}
-		</script>
-
-		<!--[if lt IE 9]>
-		<script src="lib/js/html5shiv.js"></script>
-		<![endif]-->
-	</head>
+  <link rel="stylesheet" href="reveal.js/css/reveal.min.css">
+  <link rel="stylesheet" href="reveal.js/css/theme/default.css" id="theme">
+</head>
 
 <body>
 <div class="reveal">
   <div class="slides">
     <section>
-    <h1>Deploying a new codec at scale</h1>
+    <h1>Deploying VP9 at YouTube</h1>
+    <h2>A postmortem</h2>
     </section>
 
     <section>
@@ -57,7 +34,7 @@
     </section>
 
     <section>
-    <h1>-7,490,427,558,466,059,808</h1>
+    <h2>-7,490,427,558,466,059,808 bytes</h2>
     </section>
 
     <section>
@@ -103,8 +80,275 @@
     </section>
 
     <section>
-    <p>Transform-based image codec</p>
+    <h1>MPEG-1</h1>
     </section>
+
+    <section>
+    <p>Three big tricks:</p>
+    <ul>
+      <li>Reducing precision</li>
+      <li>Temporal prediction</li>
+      <li>Motion compensation</li>
+    </ul>
+    </section>
+
+    <section>
+    <p>-&gt; demos</p>
+    </section>
+
+    <section>
+    <p>MPEG-1 is years old</p>
+    </section>
+
+    <section>
+    <p>VP9 outperforms MPEG-1 by 40x</p>
+    </section>
+
+    <section>
+    <p>So it's radically different, right?</p>
+    </section>
+
+    <section>
+    <p>Nope.</p>
+    </section>
+
+    <section>
+    <p>Intra prediction</p>
+    </section>
+
+    <section>
+    <p>In-loop deblocking</p>
+    </section>
+
+    <section>
+    <p>Altref frames (VPx)</p>
+    <p>B-frames (H.26x)</p>
+    </section>
+
+    <section>
+    <p>These are all in VP8/H.264</p>
+    </section>
+
+    <section>
+    <h2>"What is next-gen?"</h2>
+    </section>
+
+    <section>
+    <h2>COMPLETELY ARBITRARY</h2>
+    </section>
+
+    <section>
+    <h2>64-pixel superblocks</h2>
+    </section>
+
+    <section>
+    [[64-bit superblock picture]]
+    </section>
+
+    <section>
+    <h2>Asymmetric transforms</h2>
+    </section>
+
+    <section>
+    [[intra prediction]]
+    </section>
+
+    <section>
+    <p>And that's it.</p>
+    </section>
+
+    <section>
+    <h2>This might be good?</h2>
+    </section>
+
+    <section>
+    <h2>It also might be super depressing?</h2>
+    </section>
+
+    <section>
+    <p></p>
+    </section>
+
+    <section>
+    <p></p>
+    </section>
+
+    <section>
+    <p>Altref frames</p>
+    </section>
+
+    <section>
+    <p></p>
+    </section>
+
+    <section>
+    <p>Step 1:</p>
+    <h2>Demo the finished product.</h2>
+    </section>
+
+    <section>[[NAB logo]]</section>
+
+    <section>
+    <p>Step 2:</p>
+    <h2>Actually generate some files.</h2>
+    </section>
+
+    <section>
+    <p>Viper</p>
+    </section>
+
+    <section>
+    <p>Hydra</p>
+    </section>
+
+    <section>
+    <p>Distributed systems -&gt;<br />distributed headaches</p>
+    </section>
+
+    <section>
+    <p>"Query of Death"</p>
+    </section>
+
+    <section>
+    <code><pre>per_chunk_timeout_secs=500 </pre></code>
+    </section>
+
+    <section>
+    <code><pre>per_chunk_timeout_secs=5000</pre></code>
+    </section>
+
+    <section>
+    <p style="font-size: smaller;">(it's 20000% faster now)</p>
+    </section>
+
+    <section>
+    <p>Step 3:</p>
+    <h2>Demo the finished product.</h2>
+    </section>
+
+    <section>
+    <p>Step 4:</p>
+    <h2>Set up an experiment.</h2>
+    </section>
+
+    <section>
+    <p>Rerun only the most popular videos.</p>
+    </section>
+
+    <section>
+    <p>[[popularity pdf]]</p>
+    </section>
+
+    <section>
+    <p>[[popularity cdf]]</p>
+    </section>
+
+    <section>
+    <p>Step 5:</p>
+    <h2>Ship it!</h2>
+    </section>
+
+    <section>
+    <p></p>
+    </section>
+
+    <section>
+    <p></p>
+    </section>
+
+    <section>
+    <p></p>
+    </section>
+
+    <section>
+    <p>Step 6:</p>
+    <h2>Measure it properly.</h2>
+    </section>
+
+    <section><h2>Oh, crap.</h2></section>
+
+    <section>
+    <p>Step 6:</p>
+    <h2>Unship it!</h2>
+    </section>
+
+    <section>
+    <p>Decoder performance</p>
+    </section>
+
+    <section>
+    <p>New objective: optimize the decoder.</p>
+    </section>
+
+    <section>
+    <p>Step 7:</p>
+    <h2>Demo in 4K.</h2>
+    </section>
+
+    <section>[[ces logo]]</section>
+
+    <section>
+    <p>Step 8:</p>
+    <h2>Ship it <em>properly</em>.</h2>
+    </section>
+
+    <section></section>
+
+    <section>
+    <h2>Hustle.</h2>
+    </section>
+
+    <section>
+    <h2>Sell the truth.</h2>
+    </section>
+
+    <section>
+    <h2>Demos work wonders.</h2>
+    <p>Double points if they're open.</p>
+
+    <aside><p>Sounds like we did a ton but I don't think we did enough,
+    honestly. We built a way for partners to get VP9 videos on their own
+    machines at home but we didn't do anything to let people know outside of a
+    select few. If you work at a smaller company this is probably not an issue
+    but as part of a larger organization I find that direct communication with
+    users is a hard thing for an org to do, and that it can be really valuable.
+    For instance, if we had people try out VP9 earlier we might have heard
+    "looks great but it's really choppy on my machine". Instaed because it was
+    inconsistent and hidden nobody knew why YouTube was randomly slow for some
+    videos. Not great.</p></aside>
+    </section>
+
+    <section>
+    <h2>Always, always, have a proper counterfactual.</h2>
+    </section>
+
+
+
+
+
+
+
+    10 steps
+    - demo finished product
+    - encode some files
+    - demo finished product
+    - start running an experiment
+    - turn up the experiment
+    - measure the experiment properly
+    - turn off the experiment
+    - demo product... in 4k
+
+    what went right
+    - HUSTLE
+    - sell sell sell
+    - actually had a really good product to sell
+
+    what went wrong
+    - no proper control on our experiment
+    - bad at doing things without e control
+    - really poor job of publicity
+      - trying to run a business
+      - trying to build an ecosystem
 
 				<section>
 					<h2>Heads Up</h2>
@@ -427,7 +671,7 @@ function linkify( selector ) {
 				center: true,
 
 				theme: Reveal.getQueryHash().theme, // available themes are in /css/theme
-				transition: Reveal.getQueryHash().transition || 'default', // default/cube/page/concave/zoom/linear/fade/none
+				transition: 'none' || Reveal.getQueryHash().transition || 'default', // default/cube/page/concave/zoom/linear/fade/none
 
 				// Parallax scrolling
 				// parallaxBackgroundImage: 'https://s3.amazonaws.com/hakim-static/reveal-js/reveal-parallax-1.jpg',
