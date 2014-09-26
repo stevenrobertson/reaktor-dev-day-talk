@@ -1,11 +1,13 @@
-var ALPHA = 0.9;
 var video = document.getElementById('v');
+video.muted = true;
 
 var ctx = {
   w: 1280,
   h: 720,
   vw: 1280,
-  vh: 720
+  vh: 720,
+//  vo: (720 - 534) / 2
+   vo: 0
 };
 
 var camera = new THREE.OrthographicCamera(
@@ -15,6 +17,18 @@ camera.position.z = 1;
 var renderer = new THREE.WebGLRenderer({precision:'highp'});
 renderer.setSize(ctx.w, ctx.h);
 document.body.appendChild(renderer.domElement);
+
+var UniformTicker = function(alpha, uniforms) {
+  this.alpha = alpha;
+  this.uniforms = uniforms;
+}
+
+UniformTicker.prototype.tick = function() {
+  for (var i = 0; i < this.uniforms.length; i++) {
+    this.uniforms[i].value = this.uniforms[i].value * this.alpha +
+      (1.0 - this.alpha) * this.uniforms[i].target;
+  }
+};
 
 
 var createCanvasAndTexture = function() {
@@ -77,16 +91,14 @@ var hasChanged = function(oldCanvas, newCanvas) {
 
 var PixelDiffingGraph = function() {
   this.pd = createScene('deltaShader');
-  this.pd.u.lowBound = {type: 'f', value: 0.5};
-  this.pd.u.highBound = {type: 'f', value: 1.0};
-
+  this.pd.u.lowBound = {type: 'f', value: 0.5, target: 0.5};
+  this.pd.u.highBound = {type: 'f', value: 1.0, target: 1.0};
+  this.ticker = new UniformTicker(0.9, [this.pd.u.lowBound, this.pd.u.highBound]);
   this.lastTouched = 0;
-  this.lowTarget = 0.5;
-  this.highTarget = 1.0;
 };
 
 PixelDiffingGraph.prototype.render = function() {
-  videoCanvas.ctx.drawImage(video, 0, 0);
+  videoCanvas.ctx.drawImage(video, 0, ctx.vo);
   videoCanvas.tex.needsUpdate = true;
   if (!hasChanged(videoCanvas, lastFrameCanvas) &&
       Date.now() - this.lastTouched < 1000) {
@@ -98,24 +110,21 @@ PixelDiffingGraph.prototype.render = function() {
   videoCanvas = t;
   this.pd.u.baseTexture.value = videoCanvas.tex;
   this.pd.u.lastTexture.value = lastFrameCanvas.tex;
-  this.pd.u.highBound.value = ALPHA * this.pd.u.highBound.value +
-    (1.0 - ALPHA) * this.highTarget;
-  this.pd.u.lowBound.value = ALPHA * this.pd.u.lowBound.value +
-    (1.0 - ALPHA) * this.lowTarget;
+  this.ticker.tick();
   renderer.render(this.pd.scene, camera);
 };
 
 PixelDiffingGraph.prototype.handleKeypress = function(key) {
   if (key == 'a') {
-    if (this.lowTarget == 0.5) {
-      this.lowTarget = 0.3;
-      this.highTarget = 1.0;
-    } else if (this.lowTarget == 0.3) {
-      this.lowTarget = 0.05;
-      this.highTarget = 0.95;
+    if (this.pd.u.lowBound.target == 0.5) {
+      this.pd.u.lowBound.target = 0.3;
+      this.pd.u.highBound.target = 1.0;
+    } else if (this.pd.u.lowBound.target == 0.3) {
+      this.pd.u.lowBound.target = 0.05;
+      this.pd.u.highBound.target = 0.95;
     } else {
-      this.lowTarget = 0.5;
-      this.highTarget = 1.0;
+      this.pd.u.lowBound.target = 0.5;
+      this.pd.u.highBound.target = 1.0;
     }
   }
 };
@@ -132,7 +141,7 @@ var SquiggoGraph = function() {
 };
 
 SquiggoGraph.prototype.render = function() {
-  this.sq.u.time.value = (this.sq.u.time.value + 1/60) % 4;
+  this.sq.u.time.value = (this.sq.u.time.value + 1/90) % 4;
   renderer.render(this.sq.scene, camera);
 };
 
@@ -150,23 +159,74 @@ SquiggoGraph.prototype.getStatusText = function() {
 };
 
 var CrappyLaplacianGraph = function() {
-  this.lp = createScene('laplacian');
+  this.lp = createScene('filterDown');
   this.lp.u.srcTex = {type: 't', value: videoCanvas.tex};
   this.lp.u.isVertMode = {type: 'i', value: 0};
 
   this.bl = createScene('blendo');
   this.rtLoTex = createRT(1);
   this.rtMedTex = createRT(1);
-  this.rtHighTex = createRT(1);
+  this.rtScratchTex = createRT(1);
 
+  this.bl.u.srcTex = {type: "t", value: videoCanvas.tex};
   this.bl.u.loTex = {type: "t", value: this.rtLoTex};
   this.bl.u.medTex = {type: "t", value: this.rtMedTex};
-  this.bl.u.highTex = {type: "t", value: this.rtHighTex};
+
+  this.bl.u.loTexAmt = {type: 'f', value: 0, target: 0};
+  this.bl.u.medTexAmt = {type: 'f', value: 0, target: 0};
+  this.bl.u.highTexAmt = {type: 'f', value: 0, target: 1.0};
+
+  this.ticker = new UniformTicker(0.95, [
+      this.bl.u.loTexAmt, this.bl.u.medTexAmt, this.bl.u.highTexAmt]);
+
+  this.modeIndex = 0;
+  this.modes = [
+    {loTexAmt: 0, medTexAmt: 0, highTexAmt: 1,  name: 'raw'},
+    {loTexAmt: 0, medTexAmt: 1, highTexAmt: 0,  name: 'blur_med'},
+    {loTexAmt: 1, medTexAmt: 0, highTexAmt: 0,  name: 'blur_lo'},
+    //{loTexAmt: -1, medTexAmt: 0, highTexAmt: 1, name: 'hi_only'},
+    {loTexAmt: -5, medTexAmt: 0, highTexAmt: 5, name: 'hi_only_enhanced'},
+    {loTexAmt: -5, medTexAmt: 5, highTexAmt: 0, name: 'med_only_enhanced'},
+    {loTexAmt: 1, medTexAmt: -1, highTexAmt: 1, name: 'no_med'}];
 };
 
 CrappyLaplacianGraph.prototype.render = function() {
+  videoCanvas.ctx.drawImage(video, 0, ctx.vo);
+  videoCanvas.tex.needsUpdate = true;
   this.lp.u.srcTex.value = videoCanvas.tex;
-  renderer.render(this.lp.scene, camera, this.bl.u.j);
+  this.lp.u.isVertMode.value = 0;
+  renderer.render(this.lp.scene, camera, this.rtScratchTex);
+  this.lp.u.srcTex.value = this.rtScratchTex;
+  this.lp.u.isVertMode.value = 1;
+  renderer.render(this.lp.scene, camera, this.rtMedTex);
+  this.lp.u.srcTex.value = this.rtMedTex;
+  this.lp.u.isVertMode.value = 0;
+  renderer.render(this.lp.scene, camera, this.rtScratchTex);
+  this.lp.u.srcTex.value = this.rtScratchTex;
+  this.lp.u.isVertMode.value = 1;
+  renderer.render(this.lp.scene, camera, this.rtLoTex);
+
+  this.ticker.tick();
+  renderer.render(this.bl.scene, camera);
+};
+
+CrappyLaplacianGraph.prototype.handleKeypress = function(key) {
+  if (key == 'j' || key == 'k') {
+    if (key == 'j') {
+      this.modeIndex = (this.modeIndex + 1) % this.modes.length;
+    } else if (key == 'k') {
+      this.modeIndex = (this.modeIndex - 1 + this.modes.length) % this.modes.length;
+    }
+    for (var i in this.modes[this.modeIndex]) {
+      if (i != 'name') {
+        this.bl.u[i].target = this.modes[this.modeIndex][i];
+      }
+    }
+  }
+};
+
+CrappyLaplacianGraph.prototype.getStatusText = function() {
+  return 'crappy laplacian, mode[jk]=' + this.modes[this.modeIndex].name;
 };
 
 var MotionCompensationGraph = function() {
@@ -178,7 +238,7 @@ var MotionCompensationGraph = function() {
 };
 
 MotionCompensationGraph.prototype.render = function() {
-  videoCanvas.ctx.drawImage(video, 0, 0);
+  videoCanvas.ctx.drawImage(video, 0, ctx.vo);
   videoCanvas.tex.needsUpdate = true;
   if (!hasChanged(videoCanvas, lastFrameCanvas) &&
       Date.now() - this.lastTouched < 1000) {
@@ -210,7 +270,7 @@ var WaveletGraph = function() {
   this.pt = createScene('passThru');
   this.q = createScene('quantize');
   this.ss = createScene('splitscreen');
-  this.ss.u.pos = {type: 'f', value: 0};
+  this.ss.u.pos = {type: 'f', value: 1, target: 1};
   this.wa = createScene('waveletAnalysis');
   this.wa.u.randSeed = {type: "f", value: 0};
   this.wa.u.isHorizOnly = {type: "i", value: 0};
@@ -227,7 +287,7 @@ var WaveletGraph = function() {
   this.checkerboard = false;
   this.horizontal = true;
   this.enhance = false;
-  this.splitScreenPos = 1.0;
+  this.ticker = new UniformTicker(0.9, [this.ss.u.pos]);
 };
 
 WaveletGraph.prototype.flip = function() {
@@ -240,7 +300,7 @@ WaveletGraph.prototype.render = function() {
   this.wa.u.baseTexture.value = videoCanvas.tex;
   this.ws.u.baseTexture.value = videoCanvas.tex;
   this.ss.u.lastTexture.value = videoCanvas.tex;
-  videoCanvas.ctx.drawImage(video, 0, 0);
+  videoCanvas.ctx.drawImage(video, 0, ctx.vo);
   videoCanvas.tex.needsUpdate = true;
 
   if (this.numLevels <= 0 && !this.checkerboard) {
@@ -290,8 +350,7 @@ WaveletGraph.prototype.render = function() {
     }
     this.ss.u.baseTexture.value = this.rtBackTex;
     this.ss.u.qLevel.value = this.getQ(0);
-    this.ss.u.pos.value = ALPHA * this.ss.u.pos.value +
-      (1 - ALPHA) * this.splitScreenPos;
+    this.ticker.tick();
     renderer.render(this.ss.scene, camera);
   } else if (this.enhance) {
     this.we.u.isHorizOnly.value = this.horizontal;
@@ -326,14 +385,14 @@ WaveletGraph.prototype.handleKeypress = function(key) {
   } else if (key == 'e') {
     this.enhance = !this.enhance;
   } else if (key == 's') {
-    this.splitScreenPos = (this.splitScreenPos == 1.0) ? 0.5 : 1.0;
+    this.ss.u.pos.target = (this.ss.u.pos.target == 1.0) ? 0.5 : 1.0;
   }
 };
 
 WaveletGraph.prototype.getStatusText = function() {
   return 'wavelet, levels[jk]=' + this.numLevels + ', qmap[qw]=' + this.qLevels +
     ', reconstruct[r]=' + this.reconstruct + ', honly[h]=' + this.horizontal +
-    ', enhance[e]=' + this.enhance + ', sspos[s]=' + this.splitScreenPos;
+    ', enhance[e]=' + this.enhance + ', sspos[s]=' + this.ss.u.pos.target;
 };
 
 var graph = new SquiggoGraph();

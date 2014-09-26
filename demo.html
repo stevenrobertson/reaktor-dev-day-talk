@@ -11,12 +11,10 @@
 </head>
 <body>
   <div class="status" id="status"></div>
-  <video src="destiny_247.webm" autoplay loop id="v" style="display:none;"></video>
-  <script>
-navigator.webkitGetUserMedia({video:true,audio:true},function(lms) {
-  document.getElementById('v').src = URL.createObjectURL(lms);
-}, function() {});
-</script>
+  <video autoplay loop id="v" style="display:none;">
+  <!--source src="tears_of_steel_720p.mkv" type="video/webm"-->
+  <source src="destiny_247.webm" type="video/webm">
+  </video>
   <script id="vertexShader" type="x-shader/x-vertex">
 varying highp vec2 vUv;
 void main() {
@@ -66,6 +64,41 @@ void main() {
   gl_FragColor = vec4(value);
 }
   </script>
+  <script id="filterDown" type="x-shader/x-fragment">
+varying highp vec2 vUv;
+uniform sampler2D srcTex;
+uniform bool isVertMode;
+void main() {
+  vec2 diff = isVertMode ? vec2(0.0, 1.0/720.0) : vec2(1.0/1280.0, 0.0);
+  gl_FragColor = texture2D(srcTex, vUv) * 0.39895 +
+    texture2D(srcTex, vUv + diff) * 0.242 +
+    texture2D(srcTex, vUv - diff) * 0.242 +
+    texture2D(srcTex, vUv + diff * 2.0) * 0.054 +
+    texture2D(srcTex, vUv - diff * 2.0) * 0.054;
+}
+  </script>
+  <script id="blendo" type="x-shader/x-fragment">
+varying highp vec2 vUv;
+uniform sampler2D srcTex;
+uniform sampler2D medTex;
+uniform sampler2D loTex;
+
+uniform float loTexAmt;
+uniform float medTexAmt;
+uniform float highTexAmt;
+void main() {
+  if (vUv.x > 0.5) {
+    gl_FragColor = abs(
+      texture2D(srcTex, vUv) * highTexAmt +
+      texture2D(medTex, vUv) * medTexAmt +
+      texture2D(loTex, vUv) * loTexAmt);
+      } else if (vUv.x > 0.499) {
+    gl_FragColor = vec4(1.0);
+  } else {
+    gl_FragColor = texture2D(srcTex, vUv);
+  }
+}
+  </script>
   <script id="passThru" type="x-shader/x-fragment">
 uniform sampler2D baseTexture;
 varying highp vec2 vUv;
@@ -101,9 +134,29 @@ uniform sampler2D baseTexture;
 uniform sampler2D lastTexture;
 uniform int visMode;
 
-#define searchRad 3.0
+#define searchRad 4.0
 
 varying highp vec2 vUv;
+
+void test(float i, float j, vec4 color, inout float bestRsq, inout vec4 bestDiff, inout float besti, inout float bestj) {
+  vec2 altUv;
+  altUv.x = vUv.x + i * (1.0 / 1280.0);
+  altUv.y = vUv.y + j * (1.0 / 720.0);
+  vec4 lastColor = texture2D(lastTexture, altUv);
+  float xd = color.x - lastColor.x;
+  float yd = color.y - lastColor.y;
+  float zd = color.z - lastColor.z;
+  float sumsq = xd * xd + yd * yd + zd * zd;
+  if (sumsq < bestRsq) {
+    bestDiff.x = abs(xd);
+    bestDiff.y = abs(yd);
+    bestDiff.z = abs(zd);
+    bestRsq = sumsq;
+    besti = i;
+    bestj = j;
+  }
+}
+
 void main() {
   vec4 color = texture2D(baseTexture, vUv);
   vec4 bestDiff = color;
@@ -117,31 +170,24 @@ void main() {
       bestRsq = 0.0;
       bestDiff = vec4(0.0);
     } else {
-      for (float i = -searchRad; i <= searchRad; i++) {
-        for (float j = -searchRad; j <= searchRad; j++) {
-          vec2 altUv;
-          altUv.x = vUv.x + i * (1.0 / 1280.0);
-          altUv.y = vUv.y + j * (1.0 / 720.0);
-          vec4 lastColor = texture2D(lastTexture, altUv);
-          float xd = color.x - lastColor.x;
-          float yd = color.y - lastColor.y;
-          float zd = color.z - lastColor.z;
-          float sumsq = xd * xd + yd * yd + zd * zd;
-          if (sumsq < bestRsq) {
-            bestDiff.x = abs(xd);
-            bestDiff.y = abs(yd);
-            bestDiff.z = abs(zd);
-            bestRsq = sumsq;
-            besti = i;
-            bestj = j;
-          }
+      for (float dist = 1.0; dist <= searchRad; dist++) {
+        test(-dist, -dist,  color, bestRsq, bestDiff, besti, bestj);
+        test(-dist, 0.0,    color, bestRsq, bestDiff, besti, bestj);
+        test(-dist, dist,   color, bestRsq, bestDiff, besti, bestj);
+        test(0.0, -dist,    color, bestRsq, bestDiff, besti, bestj);
+        test(0.0, dist,     color, bestRsq, bestDiff, besti, bestj);
+        test(dist, -dist,   color, bestRsq, bestDiff, besti, bestj);
+        test(dist, 0.0,     color, bestRsq, bestDiff, besti, bestj);
+        test(dist, dist,    color, bestRsq, bestDiff, besti, bestj);
+        if (bestRsq < 0.00005) {
+          break;
         }
       }
     }
     if (visMode == 0) {
       color = bestDiff;
     } else if (visMode == 1) {
-      if (bestRsq == 0.0) {
+      if (bestRsq < 0.00005) {
         color = vec4(0.0);
       } else {
         color.x = 0.3 + besti / searchRad / 2.0;
